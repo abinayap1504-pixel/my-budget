@@ -58,95 +58,137 @@
         </div>
     </div>
 
-    <script>
-        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbywO_pY0pS_zQJ1INytkrX7t9wYf3NsadNnf8xed5hfUpxnG9VvjtKLUY-fgSMNBOPS/exec"; // PASTE URL HERE
-        let myChart; let selectedCategory = "Food"; let globalStats = null; let currentView = 'main'; let currentTimeFrame = 'weekly';
+    const SCRIPT_URL = "YOUR_SCRIPT_URL_HERE"; 
+let myChart; let selectedCategory = "Food"; let globalStats = null; let currentTimeFrame = 'weekly';
 
-        document.getElementById('date-display').innerText = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', weekday: 'long' });
+// --- NEW: Word to Number Converter ---
+function textToNumber(text) {
+    const words = {
+        "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+        "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90,
+        "hundred": 100, "thousand": 1000
+    };
+    let num = 0;
+    text.toLowerCase().split(/[\s-]+/).forEach(word => {
+        if (words[word]) num += words[word];
+    });
+    return num > 0 ? num : null;
+}
 
-        window.onload = refreshStats;
+document.getElementById('date-display').innerText = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', weekday: 'long' });
 
-        function refreshStats() {
-            fetch(SCRIPT_URL).then(res => res.json()).then(stats => {
-                globalStats = stats;
-                document.getElementById('weekly-total').innerText = `₹${stats.weekly}`;
-                document.getElementById('monthly-total').innerText = `₹${stats.monthly}`;
-                if(document.getElementById('chart-container').style.display === 'block') goBackMain();
-            });
-        }
+window.onload = refreshStats;
 
-        function showMainChart(timeframe) {
-            currentTimeFrame = timeframe;
-            currentView = 'main';
-            document.getElementById('chartBack').style.display = "none";
-            document.getElementById('chart-container').style.display = "block";
-            const data = timeframe === 'weekly' ? globalStats.weeklyChart : globalStats.monthlyChart;
-            renderChart(Object.keys(data), Object.values(data), true);
-        }
+function refreshStats() {
+    fetch(SCRIPT_URL).then(res => res.json()).then(stats => {
+        globalStats = stats;
+        document.getElementById('weekly-total').innerText = `₹${stats.weekly}`;
+        document.getElementById('monthly-total').innerText = `₹${stats.monthly}`;
+    });
+}
 
-        function renderChart(labels, values, isDrillable) {
-            const ctx = document.getElementById('myChart').getContext('2d');
-            if (myChart) myChart.destroy();
-            myChart = new Chart(ctx, {
-                type: 'pie',
-                data: { labels: labels, datasets: [{ data: values, backgroundColor: ['#6366f1', '#1e293b', '#f59e0b', '#10b981', '#ec4899', '#8b5cf6'] }] },
-                options: {
-                    plugins: { legend: { position: 'bottom' } },
-                    onClick: (evt, item) => {
-                        if (isDrillable && item.length > 0) {
-                            const index = item[0].index;
-                            const category = labels[index];
-                            showDrillDown(category);
-                        }
-                    }
+function showMainChart(timeframe) {
+    currentTimeFrame = timeframe;
+    document.getElementById('chartBack').style.display = "none";
+    document.getElementById('chart-container').style.display = "block";
+    const data = timeframe === 'weekly' ? globalStats.weeklyChart : globalStats.monthlyChart;
+    renderChart(Object.keys(data), Object.values(data), true);
+}
+
+function renderChart(labels, values, isDrillable) {
+    const ctx = document.getElementById('myChart').getContext('2d');
+    if (myChart) myChart.destroy();
+    myChart = new Chart(ctx, {
+        type: 'pie',
+        data: { labels: labels, datasets: [{ data: values, backgroundColor: ['#6366f1', '#1e293b', '#f59e0b', '#10b981', '#ec4899'] }] },
+        options: {
+            plugins: { legend: { position: 'bottom' } },
+            onClick: (evt, item) => {
+                if (isDrillable && item.length > 0) {
+                    const index = item[0].index;
+                    showDrillDown(labels[index]);
                 }
-            });
+            }
         }
+    });
+}
 
-        function showDrillDown(cat) {
-            currentView = 'drill';
-            document.getElementById('chartBack').style.display = "block";
-            const drillData = currentTimeFrame === 'weekly' ? globalStats.wDrill[cat] : globalStats.mDrill[cat];
-            renderChart(Object.keys(drillData), Object.values(drillData), false);
+function showDrillDown(cat) {
+    document.getElementById('chartBack').style.display = "block";
+    const drillData = currentTimeFrame === 'weekly' ? globalStats.wDrill[cat] : globalStats.mDrill[cat];
+    renderChart(Object.keys(drillData), Object.values(drillData), false);
+}
+
+function goBackMain() { showMainChart(currentTimeFrame); }
+
+function selectCat(cat) {
+    selectedCategory = cat;
+    document.querySelectorAll('.cat-chip').forEach(c => c.classList.remove('active'));
+    document.getElementById('chip-' + cat).classList.add('active');
+}
+
+// --- UPDATED: Smarter Saving Logic ---
+function manualSave() {
+    const input = document.getElementById('manualInput');
+    const rawValue = input.value;
+    
+    // Try to find a digit, if not, try to translate words
+    let amt = rawValue.match(/\d+/);
+    amt = amt ? amt[0] : textToNumber(rawValue);
+
+    if (!amt) {
+        updateStatus("Please enter a valid amount");
+        return;
+    }
+
+    updateStatus("⏳ Saving ₹" + amt + "...");
+    
+    fetch(SCRIPT_URL, {
+        method: "POST",
+        body: JSON.stringify({
+            amount: amt,
+            description: rawValue.replace(amt, "").replace(/hundred|thousand/gi, "").trim() || "Expense",
+            category: selectedCategory
+        })
+    }).then(() => {
+        updateStatus("✅ Saved!");
+        input.value = "";
+        refreshStats();
+        setTimeout(() => updateStatus("Ready"), 2000);
+    });
+}
+
+function startVoice() {
+    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    recognition.lang = 'en-IN';
+    recognition.onstart = () => updateStatus("🎤 Listening...");
+    recognition.onresult = (event) => {
+        const speech = event.results[0][0].transcript;
+        document.getElementById('manualInput').value = speech;
+        
+        // Trigger auto-categorization logic
+        const text = speech.toLowerCase();
+        const smartMap = { "Food": ["coffee", "tea", "lunch", "dinner"], "Groceries": ["milk", "veg"], "Utility": ["wifi", "bill"], "Shopping": ["clothes", "shoes"] };
+        for (const [cat, keywords] of Object.entries(smartMap)) {
+            if (keywords.some(k => text.includes(k))) { selectCat(cat); break; }
         }
+        
+        updateStatus("Review and tap Enter"); // SECURITY: No auto-save anymore
+    };
+    recognition.onerror = () => updateStatus("Voice Error");
+    recognition.start();
+}
 
-        function goBackMain() { showMainChart(currentTimeFrame); }
+function undoLast() {
+    updateStatus("⏳ Undoing...");
+    fetch(SCRIPT_URL, { method: "POST", body: JSON.stringify({ action: "undo" }) })
+    .then(res => res.text()).then(msg => { 
+        updateStatus(msg); 
+        refreshStats(); 
+        setTimeout(() => updateStatus("Ready"), 3000);
+    });
+}
 
-        function selectCat(cat) {
-            selectedCategory = cat;
-            document.querySelectorAll('.cat-chip').forEach(c => c.classList.remove('active'));
-            document.getElementById('chip-' + cat).classList.add('active');
-        }
-
-        function manualSave() {
-            const input = document.getElementById('manualInput');
-            const amtMatch = input.value.match(/\d+/);
-            if (!amtMatch) { updateStatus("Please enter expense"); return; }
-            updateStatus("⏳ Saving...");
-            fetch(SCRIPT_URL, { method: "POST", body: JSON.stringify({ amount: amtMatch[0], description: input.value.replace(amtMatch[0], "").trim(), category: selectedCategory }) })
-            .then(() => { updateStatus("Saved!"); input.value = ""; refreshStats(); });
-        }
-
-        function undoLast() {
-            updateStatus("⏳ Undoing...");
-            fetch(SCRIPT_URL, { method: "POST", body: JSON.stringify({ action: "undo" }) })
-            .then(res => res.text()).then(msg => { updateStatus(msg); refreshStats(); setTimeout(() => updateStatus("Ready"), 5000); });
-        }
-
-        function updateStatus(msg) { document.getElementById('status').innerText = msg; }
-
-        function startVoice() {
-            const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-            recognition.lang = 'en-IN';
-            recognition.onstart = () => updateStatus("🎤 Listening...");
-            recognition.onresult = (event) => {
-                const speech = event.results[0][0].transcript;
-                document.getElementById('manualInput').value = speech;
-                manualSave();
-            };
-            recognition.onerror = () => updateStatus("Voice Error. Try Chrome/Safari.");
-            recognition.start();
-        }
-    </script>
+function updateStatus(msg) { document.getElementById('status').innerText = msg; }
 </body>
 </html>
