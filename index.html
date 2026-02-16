@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
-    <title>Smart Budget</title>
+    <title>Smart Budget Pro</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
@@ -15,24 +15,32 @@
         .monthly { background: var(--text); }
         .stats-label { font-size: 10px; font-weight: 700; opacity: 0.8; text-transform: uppercase; }
         .stats-value { font-size: 18px; font-weight: 700; margin-top: 4px; }
-        #chart-container { background: white; padding: 15px; border-radius: 20px; margin-bottom: 20px; display: none; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        #chart-container { background: white; padding: 15px; border-radius: 20px; margin-bottom: 20px; display: none; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-align: center; }
         .input-card { background: var(--card); padding: 20px; border-radius: 24px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
         .category-selector { display: flex; gap: 8px; margin-bottom: 15px; overflow-x: auto; padding: 5px 0; }
         .cat-chip { padding: 8px 16px; border-radius: 20px; background: #f1f5f9; font-size: 12px; font-weight: 600; white-space: nowrap; cursor: pointer; }
         .cat-chip.active { background: var(--primary); color: white; }
         input { width: 100%; box-sizing: border-box; padding: 16px; border: 2px solid #f1f5f9; border-radius: 14px; font-size: 16px; margin-bottom: 12px; }
-        .save-btn { width: 100%; padding: 16px; border-radius: 14px; border: none; font-weight: 600; font-size: 16px; background: var(--primary); color: white; cursor: pointer; }
-        #status { margin-top: 15px; font-size: 13px; text-align: center; color: #64748b; }
+        .btn-row { display: grid; grid-template-columns: 3fr 1fr; gap: 10px; }
+        button { padding: 16px; border-radius: 14px; border: none; font-weight: 600; font-size: 16px; cursor: pointer; transition: 0.2s; }
+        .save-btn { background: var(--primary); color: white; }
+        .voice-btn { background: #f1f5f9; color: var(--text); border: 1px solid #e2e8f0; }
+        .undo-btn { width: 100%; background: transparent; color: var(--danger); font-size: 12px; margin-top: 15px; }
+        #status { margin-top: 15px; font-size: 13px; text-align: center; color: #64748b; min-height: 20px; }
+        .back-btn { font-size: 12px; margin-bottom: 10px; color: var(--primary); background: none; border: none; cursor: pointer; padding: 0; }
     </style>
 </head>
 <body>
     <div class="app-container">
-        <header><h1>Hi Abi!</h1><p id="date-display"></p></header>
+        <header><h1>Hi Abi!</h1><p id="date-display" style="font-size:14px; color:#64748b"></p></header>
         <div class="stats-grid">
-            <div class="stats-card" onclick="showChart('weekly')"><div class="stats-label">Weekly</div><div class="stats-value" id="weekly-total">₹0</div></div>
-            <div class="stats-card monthly" onclick="showChart('monthly')"><div class="stats-label">Monthly</div><div class="stats-value" id="monthly-total">₹0</div></div>
+            <div class="stats-card" onclick="showMainChart('weekly')"><div class="stats-label">Weekly</div><div class="stats-value" id="weekly-total">₹0</div></div>
+            <div class="stats-card monthly" onclick="showMainChart('monthly')"><div class="stats-label">Monthly</div><div class="stats-value" id="monthly-total">₹0</div></div>
         </div>
-        <div id="chart-container"><canvas id="myChart"></canvas></div>
+        <div id="chart-container">
+            <button class="back-btn" id="chartBack" style="display:none" onclick="goBackMain()">← Back to Categories</button>
+            <canvas id="myChart"></canvas>
+        </div>
         <div class="input-card">
             <div class="category-selector">
                 <div class="cat-chip active" id="chip-Food" onclick="selectCat('Food')">🍔 Food</div>
@@ -41,72 +49,103 @@
                 <div class="cat-chip" id="chip-Groceries" onclick="selectCat('Groceries')">🛒 Groceries</div>
             </div>
             <input type="text" id="manualInput" placeholder="e.g. 500 petrol">
-            <button class="save-btn" onclick="manualSave()">Enter expense</button>
+            <div class="btn-row">
+                <button class="save-btn" onclick="manualSave()">Enter expense</button>
+                <button class="voice-btn" onclick="startVoice()">🎤</button>
+            </div>
+            <button class="undo-btn" onclick="undoLast()">Undo last entry</button>
             <div id="status">Ready</div>
         </div>
     </div>
 
     <script>
-        // PASTE YOUR GOOGLE SCRIPT URL BELOW
-        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbywO_pY0pS_zQJ1INytkrX7t9wYf3NsadNnf8xed5hfUpxnG9VvjtKLUY-fgSMNBOPS/exec";
+        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbywO_pY0pS_zQJ1INytkrX7t9wYf3NsadNnf8xed5hfUpxnG9VvjtKLUY-fgSMNBOPS/exec"; // PASTE URL HERE
+        let myChart; let selectedCategory = "Food"; let globalStats = null; let currentView = 'main'; let currentTimeFrame = 'weekly';
 
-        let myChart; let selectedCategory = "Food"; let globalStats = null;
-        
-        const options = { day: 'numeric', month: 'short', year: 'numeric', weekday: 'long' };
-        document.getElementById('date-display').innerText = new Date().toLocaleDateString('en-GB', options);
+        document.getElementById('date-display').innerText = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', weekday: 'long' });
 
         window.onload = refreshStats;
 
         function refreshStats() {
-            fetch(SCRIPT_URL)
-                .then(res => res.json())
-                .then(stats => {
-                    globalStats = stats;
-                    document.getElementById('weekly-total').innerText = `₹${stats.weekly}`;
-                    document.getElementById('monthly-total').innerText = `₹${stats.monthly}`;
-                });
-        }
-
-        function manualSave() {
-            const input = document.getElementById('manualInput');
-            const amtMatch = input.value.match(/\d+/);
-            if (!amtMatch) { document.getElementById('status').innerText = "Please enter expense"; return; }
-            
-            document.getElementById('status').innerText = "⏳ Saving...";
-            
-            const payload = {
-                amount: amtMatch[0],
-                description: input.value.replace(amtMatch[0], "").trim(),
-                category: selectedCategory
-            };
-
-            fetch(SCRIPT_URL, {
-                method: "POST",
-                body: JSON.stringify(payload)
-            }).then(() => {
-                document.getElementById('status').innerText = "Saved!";
-                input.value = ""; 
-                refreshStats();
+            fetch(SCRIPT_URL).then(res => res.json()).then(stats => {
+                globalStats = stats;
+                document.getElementById('weekly-total').innerText = `₹${stats.weekly}`;
+                document.getElementById('monthly-total').innerText = `₹${stats.monthly}`;
+                if(document.getElementById('chart-container').style.display === 'block') goBackMain();
             });
         }
 
-        function showChart(type) {
+        function showMainChart(timeframe) {
+            currentTimeFrame = timeframe;
+            currentView = 'main';
+            document.getElementById('chartBack').style.display = "none";
             document.getElementById('chart-container').style.display = "block";
+            const data = timeframe === 'weekly' ? globalStats.weeklyChart : globalStats.monthlyChart;
+            renderChart(Object.keys(data), Object.values(data), true);
+        }
+
+        function renderChart(labels, values, isDrillable) {
             const ctx = document.getElementById('myChart').getContext('2d');
             if (myChart) myChart.destroy();
             myChart = new Chart(ctx, {
                 type: 'pie',
-                data: {
-                    labels: ['Food', 'Shopping', 'Utility', 'Groceries'],
-                    datasets: [{ data: type === 'weekly' ? globalStats.weeklyChart : globalStats.monthlyChart, backgroundColor: ['#6366f1', '#1e293b', '#f59e0b', '#10b981'] }]
+                data: { labels: labels, datasets: [{ data: values, backgroundColor: ['#6366f1', '#1e293b', '#f59e0b', '#10b981', '#ec4899', '#8b5cf6'] }] },
+                options: {
+                    plugins: { legend: { position: 'bottom' } },
+                    onClick: (evt, item) => {
+                        if (isDrillable && item.length > 0) {
+                            const index = item[0].index;
+                            const category = labels[index];
+                            showDrillDown(category);
+                        }
+                    }
                 }
             });
         }
+
+        function showDrillDown(cat) {
+            currentView = 'drill';
+            document.getElementById('chartBack').style.display = "block";
+            const drillData = currentTimeFrame === 'weekly' ? globalStats.wDrill[cat] : globalStats.mDrill[cat];
+            renderChart(Object.keys(drillData), Object.values(drillData), false);
+        }
+
+        function goBackMain() { showMainChart(currentTimeFrame); }
 
         function selectCat(cat) {
             selectedCategory = cat;
             document.querySelectorAll('.cat-chip').forEach(c => c.classList.remove('active'));
             document.getElementById('chip-' + cat).classList.add('active');
+        }
+
+        function manualSave() {
+            const input = document.getElementById('manualInput');
+            const amtMatch = input.value.match(/\d+/);
+            if (!amtMatch) { updateStatus("Please enter expense"); return; }
+            updateStatus("⏳ Saving...");
+            fetch(SCRIPT_URL, { method: "POST", body: JSON.stringify({ amount: amtMatch[0], description: input.value.replace(amtMatch[0], "").trim(), category: selectedCategory }) })
+            .then(() => { updateStatus("Saved!"); input.value = ""; refreshStats(); });
+        }
+
+        function undoLast() {
+            updateStatus("⏳ Undoing...");
+            fetch(SCRIPT_URL, { method: "POST", body: JSON.stringify({ action: "undo" }) })
+            .then(res => res.text()).then(msg => { updateStatus(msg); refreshStats(); setTimeout(() => updateStatus("Ready"), 5000); });
+        }
+
+        function updateStatus(msg) { document.getElementById('status').innerText = msg; }
+
+        function startVoice() {
+            const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+            recognition.lang = 'en-IN';
+            recognition.onstart = () => updateStatus("🎤 Listening...");
+            recognition.onresult = (event) => {
+                const speech = event.results[0][0].transcript;
+                document.getElementById('manualInput').value = speech;
+                manualSave();
+            };
+            recognition.onerror = () => updateStatus("Voice Error. Try Chrome/Safari.");
+            recognition.start();
         }
     </script>
 </body>
