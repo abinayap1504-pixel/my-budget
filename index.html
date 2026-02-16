@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
+    <title>Smart Budget</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root { --primary: #6366f1; --bg: #f8fafc; --card: #ffffff; --text: #1e293b; --danger: #ef4444; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; display: flex; justify-content: center; }
+        .app-container { width: 100%; max-width: 400px; }
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+        .stats-card { background: var(--primary); padding: 16px; border-radius: 20px; color: white; cursor: pointer; }
+        .monthly { background: var(--text); }
+        .stats-label { font-size: 10px; font-weight: 700; opacity: 0.8; text-transform: uppercase; }
+        .stats-value { font-size: 18px; font-weight: 700; margin-top: 4px; }
+        #chart-container { background: white; padding: 15px; border-radius: 20px; margin-bottom: 20px; display: none; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .input-card { background: var(--card); padding: 20px; border-radius: 24px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .category-selector { display: flex; gap: 8px; margin-bottom: 15px; overflow-x: auto; padding: 5px 0; }
+        .cat-chip { padding: 8px 16px; border-radius: 20px; background: #f1f5f9; font-size: 12px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+        .cat-chip.active { background: var(--primary); color: white; }
+        input { width: 100%; box-sizing: border-box; padding: 16px; border: 2px solid #f1f5f9; border-radius: 14px; font-size: 16px; margin-bottom: 12px; }
+        .save-btn { width: 100%; padding: 16px; border-radius: 14px; border: none; font-weight: 600; font-size: 16px; background: var(--primary); color: white; cursor: pointer; }
+        #status { margin-top: 15px; font-size: 13px; text-align: center; color: #64748b; }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <header><h1>Hi Abi!</h1><p id="date-display"></p></header>
+        <div class="stats-grid">
+            <div class="stats-card" onclick="showChart('weekly')"><div class="stats-label">Weekly</div><div class="stats-value" id="weekly-total">₹0</div></div>
+            <div class="stats-card monthly" onclick="showChart('monthly')"><div class="stats-label">Monthly</div><div class="stats-value" id="monthly-total">₹0</div></div>
+        </div>
+        <div id="chart-container"><canvas id="myChart"></canvas></div>
+        <div class="input-card">
+            <div class="category-selector">
+                <div class="cat-chip active" id="chip-Food" onclick="selectCat('Food')">🍔 Food</div>
+                <div class="cat-chip" id="chip-Shopping" onclick="selectCat('Shopping')">🛍️ Shopping</div>
+                <div class="cat-chip" id="chip-Utility" onclick="selectCat('Utility')">⚡ Utility</div>
+                <div class="cat-chip" id="chip-Groceries" onclick="selectCat('Groceries')">🛒 Groceries</div>
+            </div>
+            <input type="text" id="manualInput" placeholder="e.g. 500 petrol">
+            <button class="save-btn" onclick="manualSave()">Enter expense</button>
+            <div id="status">Ready</div>
+        </div>
+    </div>
+
+    <script>
+        // PASTE YOUR GOOGLE SCRIPT URL BELOW
+        const SCRIPT_URL = "https://script.googleusercontent.com/macros/echo?user_content_key=AY5xjrQMiib7UX1rzy0YMnDsCxJlSxLJFG-nqFF_vsrZ3c8KT92eLKaEwj_8U2AuBr2AHFUYOQoVzOGPg17tH1z-Uz7RkYRtEntZ-_kswAaN7DOlmt6Zm_T_r5jVjIvvI-KTsVBRcMF_h_QTHpIS8pDRKD6Y8riojJCpoi3g2DLO0om8ms53QfA_roZ8aDvRUSdwgt8O4R7HT2Uank6rgpWQCOb0cusFVMhI3rV1oESC2VuOi4sKS587G2IdzV_BGK62YHJzfLZAnepGu5AL7brVHdFnb_EnaA&lib=MMjsFO6OUgHad-bSDRqfGfN-pZaGn40TV";
+
+        let myChart; let selectedCategory = "Food"; let globalStats = null;
+        
+        const options = { day: 'numeric', month: 'short', year: 'numeric', weekday: 'long' };
+        document.getElementById('date-display').innerText = new Date().toLocaleDateString('en-GB', options);
+
+        window.onload = refreshStats;
+
+        function refreshStats() {
+            fetch(SCRIPT_URL)
+                .then(res => res.json())
+                .then(stats => {
+                    globalStats = stats;
+                    document.getElementById('weekly-total').innerText = `₹${stats.weekly}`;
+                    document.getElementById('monthly-total').innerText = `₹${stats.monthly}`;
+                });
+        }
+
+        function manualSave() {
+            const input = document.getElementById('manualInput');
+            const amtMatch = input.value.match(/\d+/);
+            if (!amtMatch) { document.getElementById('status').innerText = "Please enter expense"; return; }
+            
+            document.getElementById('status').innerText = "⏳ Saving...";
+            
+            const payload = {
+                amount: amtMatch[0],
+                description: input.value.replace(amtMatch[0], "").trim(),
+                category: selectedCategory
+            };
+
+            fetch(SCRIPT_URL, {
+                method: "POST",
+                body: JSON.stringify(payload)
+            }).then(() => {
+                document.getElementById('status').innerText = "Saved!";
+                input.value = ""; 
+                refreshStats();
+            });
+        }
+
+        function showChart(type) {
+            document.getElementById('chart-container').style.display = "block";
+            const ctx = document.getElementById('myChart').getContext('2d');
+            if (myChart) myChart.destroy();
+            myChart = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: ['Food', 'Shopping', 'Utility', 'Groceries'],
+                    datasets: [{ data: type === 'weekly' ? globalStats.weeklyChart : globalStats.monthlyChart, backgroundColor: ['#6366f1', '#1e293b', '#f59e0b', '#10b981'] }]
+                }
+            });
+        }
+
+        function selectCat(cat) {
+            selectedCategory = cat;
+            document.querySelectorAll('.cat-chip').forEach(c => c.classList.remove('active'));
+            document.getElementById('chip-' + cat).classList.add('active');
+        }
+    </script>
+</body>
+</html>
