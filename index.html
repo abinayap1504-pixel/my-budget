@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html>
 <head>
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
     <title>Smart Budget Pro</title>
@@ -31,6 +33,19 @@
     </style>
 </head>
 <body>
+    <div id="login-screen" style="padding: 40px; text-align: center;">
+    <h2>Welcome to Smart Budget</h2>
+    <input type="tel" id="phoneNumber" placeholder="+91 9876543210" style="margin-bottom:10px;">
+    <div id="recaptcha-container"></div>
+    <button onclick="sendOTP()" class="save-btn">Get OTP</button>
+    <div id="otp-section" style="display:none; margin-top:20px;">
+        <input type="text" id="verificationCode" placeholder="6-digit OTP">
+        <button onclick="verifyOTP()" class="save-btn">Verify & Login</button>
+    </div>
+</div>
+
+<div id="app-content" style="display:none;">
+    </div>
     <div class="app-container">
         <header><h1>Hi Abi!</h1><p id="date-display" style="font-size:14px; color:#64748b"></p></header>
         <div class="stats-grid">
@@ -59,6 +74,43 @@
     </div>
 
    <script>
+// Initialize Firebase
+const firebaseConfig = { /* PASTE YOUR CONFIG HERE */ };
+firebase.initializeApp(firebaseConfig);
+
+let currentUser = null;
+
+firebase.auth().onAuthStateChanged((user) => {
+    if (user) {
+        currentUser = user;
+        document.getElementById('login-screen').style.display = 'none';
+        document.getElementById('app-content').style.display = 'block';
+        refreshStats();
+    } else {
+        document.getElementById('login-screen').style.display = 'block';
+        document.getElementById('app-content').style.display = 'none';
+    }
+});
+
+// Update fetch calls to include userId
+function refreshStats() {
+    fetch(`${SCRIPT_URL}?userId=${currentUser.uid}`)
+        .then(res => res.json())
+        .then(stats => { /* existing logic to update UI */ });
+}
+
+function manualSave() {
+    // ... amount/desc logic ...
+    const payload = {
+        amount: amt,
+        description: desc,
+        category: selectedCategory,
+        userId: currentUser.uid // SECURES THE DATA
+    };
+    
+    fetch(SCRIPT_URL, { method: "POST", body: JSON.stringify(payload) })
+    .then(() => { /* refresh UI */ });
+}
        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbywO_pY0pS_zQJ1INytkrX7t9wYf3NsadNnf8xed5hfUpxnG9VvjtKLUY-fgSMNBOPS/exec"; 
 let myChart; let selectedCategory = "Food"; let globalStats = null; let currentTimeFrame = 'weekly';
 
