@@ -1,248 +1,204 @@
 <!DOCTYPE html>
 <html>
 <head>
-<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
-    <title>Smart Budget Pro</title>
+    <title>Smart Budget</title>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         :root { --primary: #6366f1; --bg: #f8fafc; --card: #ffffff; --text: #1e293b; --danger: #ef4444; }
         body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; display: flex; justify-content: center; }
         .app-container { width: 100%; max-width: 400px; }
+        #login-screen, .input-card, #chart-container { background: white; padding: 25px; border-radius: 24px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 20px; }
         .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
         .stats-card { background: var(--primary); padding: 16px; border-radius: 20px; color: white; cursor: pointer; }
         .monthly { background: var(--text); }
         .stats-label { font-size: 10px; font-weight: 700; opacity: 0.8; text-transform: uppercase; }
-        .stats-value { font-size: 18px; font-weight: 700; margin-top: 4px; }
-        #chart-container { background: white; padding: 15px; border-radius: 20px; margin-bottom: 20px; display: none; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-align: center; }
-        .input-card { background: var(--card); padding: 20px; border-radius: 24px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-        .category-selector { display: flex; gap: 8px; margin-bottom: 15px; overflow-x: auto; padding: 5px 0; }
-        .cat-chip { padding: 8px 16px; border-radius: 20px; background: #f1f5f9; font-size: 12px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+        .stats-value { font-size: 18px; font-weight: 700; }
+        .category-selector { display: flex; gap: 8px; margin-bottom: 15px; overflow-x: auto; padding: 5px 0; scrollbar-width: none; }
+        .cat-chip { padding: 8px 16px; border-radius: 20px; background: #f1f5f9; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
         .cat-chip.active { background: var(--primary); color: white; }
-        input { width: 100%; box-sizing: border-box; padding: 16px; border: 2px solid #f1f5f9; border-radius: 14px; font-size: 16px; margin-bottom: 12px; }
+        input { width: 100%; box-sizing: border-box; padding: 15px; border: 2px solid #f1f5f9; border-radius: 12px; font-size: 16px; margin-bottom: 10px; }
         .btn-row { display: grid; grid-template-columns: 3fr 1fr; gap: 10px; }
-        button { padding: 16px; border-radius: 14px; border: none; font-weight: 600; font-size: 16px; cursor: pointer; transition: 0.2s; }
+        button { padding: 15px; border-radius: 12px; border: none; font-weight: 600; cursor: pointer; }
         .save-btn { background: var(--primary); color: white; }
-        .voice-btn { background: #f1f5f9; color: var(--text); border: 1px solid #e2e8f0; }
-        .undo-btn { width: 100%; background: transparent; color: var(--danger); font-size: 12px; margin-top: 15px; }
-        #status { margin-top: 15px; font-size: 13px; text-align: center; color: #64748b; min-height: 20px; }
-        .back-btn { font-size: 12px; margin-bottom: 10px; color: var(--primary); background: none; border: none; cursor: pointer; padding: 0; }
+        .voice-btn { background: #f1f5f9; }
+        .undo-btn { background: none; color: var(--danger); font-size: 12px; margin-top: 10px; width: 100%; }
     </style>
 </head>
 <body>
-    <div id="login-screen" style="padding: 40px; text-align: center;">
-    <h2>Welcome to Smart Budget</h2>
-    <input type="tel" id="phoneNumber" placeholder="+91 9876543210" style="margin-bottom:10px;">
-    <div id="recaptcha-container"></div>
-    <button onclick="sendOTP()" class="save-btn">Get OTP</button>
-    <div id="otp-section" style="display:none; margin-top:20px;">
-        <input type="text" id="verificationCode" placeholder="6-digit OTP">
-        <button onclick="verifyOTP()" class="save-btn">Verify & Login</button>
-    </div>
-</div>
-
-<div id="app-content" style="display:none;">
-    </div>
     <div class="app-container">
-        <header><h1>Hi Abi!</h1><p id="date-display" style="font-size:14px; color:#64748b"></p></header>
-        <div class="stats-grid">
-            <div class="stats-card" onclick="showMainChart('weekly')"><div class="stats-label">Weekly</div><div class="stats-value" id="weekly-total">₹0</div></div>
-            <div class="stats-card monthly" onclick="showMainChart('monthly')"><div class="stats-label">Monthly</div><div class="stats-value" id="monthly-total">₹0</div></div>
-        </div>
-        <div id="chart-container">
-            <button class="back-btn" id="chartBack" style="display:none" onclick="goBackMain()">← Back to Categories</button>
-            <canvas id="myChart"></canvas>
-        </div>
-        <div class="input-card">
-            <div class="category-selector">
-                <div class="cat-chip active" id="chip-Food" onclick="selectCat('Food')">🍔 Food</div>
-                <div class="cat-chip" id="chip-Shopping" onclick="selectCat('Shopping')">🛍️ Shopping</div>
-                <div class="cat-chip" id="chip-Utility" onclick="selectCat('Utility')">⚡ Utility</div>
-                <div class="cat-chip" id="chip-Groceries" onclick="selectCat('Groceries')">🛒 Groceries</div>
+        <div id="login-screen">
+            <h2>Smart Budget</h2>
+            <input type="tel" id="phoneNumber" placeholder="+91 99999 99999">
+            <div id="recaptcha-container"></div>
+            <button onclick="sendOTP()" class="save-btn" id="otp-btn">Send OTP</button>
+            <div id="otp-section" style="display:none; margin-top:15px;">
+                <input type="text" id="verificationCode" placeholder="6-digit OTP">
+                <button onclick="verifyOTP()" class="save-btn">Verify</button>
             </div>
-            <input type="text" id="manualInput" placeholder="e.g. 500 petrol">
-            <div class="btn-row">
-                <button class="save-btn" onclick="manualSave()">Enter expense</button>
-                <button class="voice-btn" onclick="startVoice()">🎤</button>
+        </div>
+
+        <div id="app-content" style="display:none;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h1 style="margin:0; font-size:22px;">Hi Abi!</h1>
+                <button onclick="logout()" style="padding:5px 10px; font-size:10px; background:#fee2e2; color:#ef4444;">Logout</button>
             </div>
-            <button class="undo-btn" onclick="undoLast()">Undo last entry</button>
-            <div id="status">Ready</div>
+            
+            <div class="stats-grid">
+                <div class="stats-card" onclick="showMainChart('weekly')"><div class="stats-label">Weekly</div><div id="weekly-total" class="stats-value">₹0</div></div>
+                <div class="stats-card monthly" onclick="showMainChart('monthly')"><div class="stats-label">Monthly</div><div id="monthly-total" class="stats-value">₹0</div></div>
+            </div>
+
+            <div id="chart-container" style="display:none;">
+                <button onclick="goBackMain()" id="chartBack" style="display:none; margin-bottom:10px; color:var(--primary); background:none; border:none;">← Back</button>
+                <canvas id="myChart"></canvas>
+            </div>
+
+            <div class="input-card">
+                <div class="category-selector">
+                    <div class="cat-chip active" id="chip-Food" onclick="selectCat('Food')">🍔 Food</div>
+                    <div class="cat-chip" id="chip-Shopping" onclick="selectCat('Shopping')">🛍️ Shopping</div>
+                    <div class="cat-chip" id="chip-Utility" onclick="selectCat('Utility')">⚡ Utility</div>
+                    <div class="cat-chip" id="chip-Groceries" onclick="selectCat('Groceries')">🛒 Groceries</div>
+                </div>
+                <input type="text" id="manualInput" placeholder="e.g. 100 coffee">
+                <div class="btn-row">
+                    <button class="save-btn" onclick="manualSave()">Enter Expense</button>
+                    <button class="voice-btn" onclick="startVoice()">🎤</button>
+                </div>
+                <button class="undo-btn" onclick="undoLast()">Undo Last Entry</button>
+                <div id="status" style="margin-top:10px; text-align:center; font-size:12px; color:#64748b;">Ready</div>
+            </div>
         </div>
     </div>
 
-   <script>
-// Initialize Firebase
-const firebaseConfig = { /* PASTE YOUR CONFIG HERE */ };
-firebase.initializeApp(firebaseConfig);
+    <script>
+        // --- 1. CONFIGURATION (REPLACE THESE) ---
+        const SCRIPT_URL = "PASTE_YOUR_GOOGLE_WEB_APP_URL_HERE";
+        const firebaseConfig = {
+            apiKey: "PASTE_YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT.firebaseapp.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT.appspot.com",
+            messagingSenderId: "YOUR_ID",
+            appId: "YOUR_APP_ID"
+        };
 
-let currentUser = null;
+        // --- 2. FIREBASE & AUTH ---
+        firebase.initializeApp(firebaseConfig);
+        let confirmationResult;
+        let currentUser = null;
+        window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', { 'size': 'invisible' });
 
-firebase.auth().onAuthStateChanged((user) => {
-    if (user) {
-        currentUser = user;
-        document.getElementById('login-screen').style.display = 'none';
-        document.getElementById('app-content').style.display = 'block';
-        refreshStats();
-    } else {
-        document.getElementById('login-screen').style.display = 'block';
-        document.getElementById('app-content').style.display = 'none';
-    }
-});
-
-// Update fetch calls to include userId
-function refreshStats() {
-    fetch(`${SCRIPT_URL}?userId=${currentUser.uid}`)
-        .then(res => res.json())
-        .then(stats => { /* existing logic to update UI */ });
-}
-
-function manualSave() {
-    // ... amount/desc logic ...
-    const payload = {
-        amount: amt,
-        description: desc,
-        category: selectedCategory,
-        userId: currentUser.uid // SECURES THE DATA
-    };
-    
-    fetch(SCRIPT_URL, { method: "POST", body: JSON.stringify(payload) })
-    .then(() => { /* refresh UI */ });
-}
-       const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbywO_pY0pS_zQJ1INytkrX7t9wYf3NsadNnf8xed5hfUpxnG9VvjtKLUY-fgSMNBOPS/exec"; 
-let myChart; let selectedCategory = "Food"; let globalStats = null; let currentTimeFrame = 'weekly';
-
-// --- NEW: Word to Number Converter ---
-function textToNumber(text) {
-    const words = {
-        "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
-        "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90,
-        "hundred": 100, "thousand": 1000
-    };
-    let num = 0;
-    text.toLowerCase().split(/[\s-]+/).forEach(word => {
-        if (words[word]) num += words[word];
-    });
-    return num > 0 ? num : null;
-}
-
-document.getElementById('date-display').innerText = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', weekday: 'long' });
-
-window.onload = refreshStats;
-
-function refreshStats() {
-    fetch(SCRIPT_URL).then(res => res.json()).then(stats => {
-        globalStats = stats;
-        document.getElementById('weekly-total').innerText = `₹${stats.weekly}`;
-        document.getElementById('monthly-total').innerText = `₹${stats.monthly}`;
-    });
-}
-
-function showMainChart(timeframe) {
-    currentTimeFrame = timeframe;
-    document.getElementById('chartBack').style.display = "none";
-    document.getElementById('chart-container').style.display = "block";
-    const data = timeframe === 'weekly' ? globalStats.weeklyChart : globalStats.monthlyChart;
-    renderChart(Object.keys(data), Object.values(data), true);
-}
-
-function renderChart(labels, values, isDrillable) {
-    const ctx = document.getElementById('myChart').getContext('2d');
-    if (myChart) myChart.destroy();
-    myChart = new Chart(ctx, {
-        type: 'pie',
-        data: { labels: labels, datasets: [{ data: values, backgroundColor: ['#6366f1', '#1e293b', '#f59e0b', '#10b981', '#ec4899'] }] },
-        options: {
-            plugins: { legend: { position: 'bottom' } },
-            onClick: (evt, item) => {
-                if (isDrillable && item.length > 0) {
-                    const index = item[0].index;
-                    showDrillDown(labels[index]);
-                }
+        firebase.auth().onAuthStateChanged(user => {
+            if (user) {
+                currentUser = user;
+                document.getElementById('login-screen').style.display = 'none';
+                document.getElementById('app-content').style.display = 'block';
+                refreshStats();
             }
+        });
+
+        function sendOTP() {
+            const phone = document.getElementById('phoneNumber').value;
+            firebase.auth().signInWithPhoneNumber(phone, window.recaptchaVerifier)
+                .then(result => { 
+                    confirmationResult = result; 
+                    document.getElementById('otp-section').style.display='block';
+                    document.getElementById('otp-btn').style.display='none';
+                }).catch(err => alert(err.message));
         }
-    });
-}
 
-function showDrillDown(cat) {
-    document.getElementById('chartBack').style.display = "block";
-    const drillData = currentTimeFrame === 'weekly' ? globalStats.wDrill[cat] : globalStats.mDrill[cat];
-    renderChart(Object.keys(drillData), Object.values(drillData), false);
-}
-
-function goBackMain() { showMainChart(currentTimeFrame); }
-
-function selectCat(cat) {
-    selectedCategory = cat;
-    document.querySelectorAll('.cat-chip').forEach(c => c.classList.remove('active'));
-    document.getElementById('chip-' + cat).classList.add('active');
-}
-
-// --- UPDATED: Smarter Saving Logic ---
-function manualSave() {
-    const input = document.getElementById('manualInput');
-    const rawValue = input.value;
-    
-    // Try to find a digit, if not, try to translate words
-    let amt = rawValue.match(/\d+/);
-    amt = amt ? amt[0] : textToNumber(rawValue);
-
-    if (!amt) {
-        updateStatus("Please enter a valid amount");
-        return;
-    }
-
-    updateStatus("⏳ Saving ₹" + amt + "...");
-    
-    fetch(SCRIPT_URL, {
-        method: "POST",
-        body: JSON.stringify({
-            amount: amt,
-            description: rawValue.replace(amt, "").replace(/hundred|thousand/gi, "").trim() || "Expense",
-            category: selectedCategory
-        })
-    }).then(() => {
-        updateStatus("✅ Saved!");
-        input.value = "";
-        refreshStats();
-        setTimeout(() => updateStatus("Ready"), 2000);
-    });
-}
-
-function startVoice() {
-    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-    recognition.lang = 'en-IN';
-    recognition.onstart = () => updateStatus("🎤 Listening...");
-    recognition.onresult = (event) => {
-        const speech = event.results[0][0].transcript;
-        document.getElementById('manualInput').value = speech;
-        
-        // Trigger auto-categorization logic
-        const text = speech.toLowerCase();
-        const smartMap = { "Food": ["coffee", "tea", "lunch", "dinner"], "Groceries": ["milk", "veg"], "Utility": ["wifi", "bill"], "Shopping": ["clothes", "shoes"] };
-        for (const [cat, keywords] of Object.entries(smartMap)) {
-            if (keywords.some(k => text.includes(k))) { selectCat(cat); break; }
+        function verifyOTP() {
+            const code = document.getElementById('verificationCode').value;
+            confirmationResult.confirm(code).catch(() => alert("Wrong OTP"));
         }
-        
-        updateStatus("Review and tap Enter"); // SECURITY: No auto-save anymore
-    };
-    recognition.onerror = () => updateStatus("Voice Error");
-    recognition.start();
-}
 
-function undoLast() {
-    updateStatus("⏳ Undoing...");
-    fetch(SCRIPT_URL, { method: "POST", body: JSON.stringify({ action: "undo" }) })
-    .then(res => res.text()).then(msg => { 
-        updateStatus(msg); 
-        refreshStats(); 
-        setTimeout(() => updateStatus("Ready"), 3000);
-    });
-}
+        function logout() { firebase.auth().signOut().then(() => location.reload()); }
 
-function updateStatus(msg) { document.getElementById('status').innerText = msg; }
-   </script> 
+        // --- 3. APP LOGIC ---
+        let myChart; let selectedCategory = "Food"; let globalStats = null; let currentTimeFrame = 'weekly';
+
+        function refreshStats() {
+            fetch(`${SCRIPT_URL}?userId=${currentUser.uid}`)
+                .then(res => res.json())
+                .then(stats => {
+                    globalStats = stats;
+                    document.getElementById('weekly-total').innerText = `₹${stats.weekly}`;
+                    document.getElementById('monthly-total').innerText = `₹${stats.monthly}`;
+                });
+        }
+
+        function selectCat(cat) {
+            selectedCategory = cat;
+            document.querySelectorAll('.cat-chip').forEach(c => c.classList.remove('active'));
+            document.getElementById('chip-' + cat).classList.add('active');
+        }
+
+        function manualSave() {
+            const input = document.getElementById('manualInput');
+            let amt = input.value.match(/\d+/);
+            if(!amt) return alert("Enter a number");
+            
+            document.getElementById('status').innerText = "Saving...";
+            fetch(SCRIPT_URL, {
+                method: "POST",
+                body: JSON.stringify({
+                    amount: amt[0],
+                    description: input.value.replace(amt[0], "").trim(),
+                    category: selectedCategory,
+                    userId: currentUser.uid
+                })
+            }).then(() => {
+                input.value = ""; refreshStats(); document.getElementById('status').innerText = "Saved!";
+            });
+        }
+
+        function showMainChart(timeframe) {
+            currentTimeFrame = timeframe;
+            document.getElementById('chartBack').style.display = "none";
+            document.getElementById('chart-container').style.display = "block";
+            const data = timeframe === 'weekly' ? globalStats.weeklyChart : globalStats.monthlyChart;
+            renderChart(Object.keys(data), Object.values(data), true);
+        }
+
+        function renderChart(labels, values, isDrillable) {
+            const ctx = document.getElementById('myChart').getContext('2d');
+            if (myChart) myChart.destroy();
+            myChart = new Chart(ctx, {
+                type: 'pie',
+                data: { labels, datasets: [{ data: values, backgroundColor: ['#6366f1', '#1e293b', '#f59e0b', '#10b981'] }] },
+                options: { onClick: (e, item) => { if(isDrillable && item.length > 0) showDrillDown(labels[item[0].index]); } }
+            });
+        }
+
+        function showDrillDown(cat) {
+            document.getElementById('chartBack').style.display = "block";
+            const drillData = currentTimeFrame === 'weekly' ? globalStats.wDrill[cat] : globalStats.mDrill[cat];
+            renderChart(Object.keys(drillData), Object.values(drillData), false);
+        }
+
+        function goBackMain() { showMainChart(currentTimeFrame); }
+
+        function startVoice() {
+            const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+            recognition.lang = 'en-IN';
+            recognition.onstart = () => document.getElementById('status').innerText = "Listening...";
+            recognition.onresult = (event) => {
+                document.getElementById('manualInput').value = event.results[0][0].transcript;
+                document.getElementById('status').innerText = "Review and Enter";
+            };
+            recognition.start();
+        }
+
+        function undoLast() {
+            fetch(SCRIPT_URL, { method: "POST", body: JSON.stringify({ action: "undo", userId: currentUser.uid }) })
+            .then(() => { refreshStats(); document.getElementById('status').innerText = "Undone!"; });
+        }
+    </script>
 </body>
 </html>
